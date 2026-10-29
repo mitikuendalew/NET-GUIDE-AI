@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetGuide AI - Login</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #0f172a; 
+            color: #f8fafc; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+        }
+        .card { 
+            background: #1e293b; 
+            padding: 40px; 
+            border-radius: 12px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); 
+            width: 350px; 
+        }
+        h2 { 
+            text-align: center; 
+            color: #38bdf8; 
+            margin-bottom: 24px; 
+        }
+        label { 
+            display: block; 
+            margin-bottom: 8px; 
+            font-size: 14px; 
+            color: #94a3b8; 
+        }
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            margin-bottom: 20px; 
+            background: #0f172a; 
+            border: 1px solid #334155; 
+            border-radius: 6px; 
+            color: #fff; 
+            box-sizing: border-box; 
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #38bdf8;
+        }
+        button { 
+            width: 100%; 
+            padding: 12px; 
+            background: #0284c7; 
+            border: none; 
+            border-radius: 6px; 
+            color: white; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: background 0.2s; 
+            font-size: 15px;
+        }
+        button:hover { background: #0369a1; }
+        button:disabled { background: #475569; cursor: not-allowed; }
+        .msg { 
+            font-size: 13px; 
+            margin-bottom: 15px; 
+            text-align: center; 
+            padding: 8px;
+            border-radius: 4px;
+            display: none;
+        }
+        .msg.error { color: #f87171; background: rgba(239, 68, 68, 0.1); display: block; }
+        .msg.success { color: #4ade80; background: rgba(74, 222, 128, 0.1); display: block; }
+        .footer-link { text-align: center; margin-top: 20px; font-size: 13px; color: #94a3b8; }
+        .footer-link a { color: #38bdf8; text-decoration: none; }
+        .footer-link a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>NetGuide AI Login</h2>
+        <div id="status-msg" class="msg"></div>
+        
+        <form id="login-form">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" autocomplete="email" placeholder="student@university.edu" required>
+            
+            <label for="password">Password</label>
+            <input type="password" id="password" autocomplete="current-password" required>
+            
+            <button type="submit" id="submit-btn">Sign In</button>
+        </form>
+        
+        <div class="footer-link">Don't have an account? <a href="/signup">Sign up</a></div>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submit-btn');
+            const statusMsg = document.getElementById('status-msg');
+
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            submitBtn.disabled = true;
+            submitBtn.innerText = "Signing In...";
+            statusMsg.className = "msg";
+            statusMsg.innerText = "";
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    statusMsg.className = "msg success";
+                    statusMsg.innerText = "Login successful! Redirecting...";
+                    setTimeout(() => {
+                        window.location.href = data.redirect;
+                    }, 800);
+                } else {
+                    statusMsg.className = "msg error";
+                    statusMsg.innerText = data.error || "Invalid credentials.";
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = "Sign In";
+                }
+            } catch (err) {
+                statusMsg.className = "msg error";
+                statusMsg.innerText = "Network error connecting to server.";
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Sign In";
+            }
+        });
+    </script>
+</body>
+</html>
