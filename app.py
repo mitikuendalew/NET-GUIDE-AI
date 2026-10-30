@@ -197,7 +197,7 @@ def api_logout():
     return jsonify({"message": "Logged out successfully"}), 200
 
 # --- GEMINI AI INTEGRATION API ---
-@app.route('/api/chat', methods=['POST'])
+'''@app.route('/api/chat', methods=['POST'])
 @login_required
 def api_chat():
     data = request.get_json() or {}
@@ -269,7 +269,146 @@ def api_chat():
         error_msg = str(e)
         if "503" in error_msg or "UNAVAILABLE" in error_msg:
             return jsonify({"error": "AI service is currently experiencing high demand. Please try again in a moment."}), 503
+        return jsonify({"error": f"AI generation failed: {error_msg}"}), 500'''
+# --- GEMINI AI INTEGRATION API ---
+# --- GEMINI AI INTEGRATION API ---
+@app.route('/api/chat', methods=['POST'])
+@login_required
+def api_chat():
+    data = request.get_json() or {}
+    prompt = data.get('prompt', '').strip()
+
+    if not prompt:
+        return jsonify({"error": "Prompt cannot be empty."}), 400
+
+    if not client:
+        return jsonify({"error": "Gemini API client is not configured."}), 500
+
+    system_instruction = (
+        "You are NetGuide AI, an expert networking assistant for students. "
+        "When users paste Cisco configuration errors, diagnose the root cause and provide corrected code blocks. "
+        "For networking theory, explain core principles using structured bullet points, bold headers, and markdown tables. "
+        "Keep answers concise, highly organized, and optimized for low latency."
+    )
+
+    try:
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            temperature=0.3,
+            max_output_tokens=1500,
+        )
+
+        # Automatic retry mechanism for temporary 503 high-demand events
+        response = None
+        last_error = None
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model='gemini-3.8-flash',
+                    contents=prompt,
+                    config=config
+                )
+                break
+            except Exception as api_err:
+                last_error = api_err
+                err_str = str(api_err)
+                if "503" in err_str or "UNAVAILABLE" in err_str:
+                    if attempt < 2:
+                        time.sleep(1.5)  # Wait 1.5 seconds before retrying
+                        continue
+                raise api_err
+
+        if not response:
+            raise last_error
+
+        reply = response.text
+
+        # Log complete response to database
+        conn = get_db_connection()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO chat_logs (user_id, prompt, response) VALUES (?, ?, ?)",
+                    (session['user_id'], prompt, reply)
+                )
+                conn.commit()
+            except Exception as log_err:
+                print(f"Warning: Failed to log chat: {log_err}")
+            finally:
+                conn.close()
+
+        return jsonify({"response": reply}), 200
+
+    except Exception as e:
+        error_msg = str(e)
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+            return jsonify({"error": "Daily AI free-tier quota reached (20 requests/day limit). Please try again tomorrow or update your API key."}), 429
+        if "503" in error_msg or "UNAVAILABLE" in error_msg:
+            return jsonify({"error": "AI service is experiencing high demand. Please try again in a moment."}), 503
         return jsonify({"error": f"AI generation failed: {error_msg}"}), 500
+
+# --- GEMINI AI live STREAMING INTEGRATION API for response ---
+'''@app.route('/api/chat', methods=['POST'])
+@login_required
+def api_chat():
+    data = request.get_json() or {}
+    prompt = data.get('prompt', '').strip()
+
+    if not prompt:
+        return jsonify({"error": "Prompt cannot be empty."}), 400
+
+    if not client:
+        return jsonify({"error": "Gemini API client is not configured."}), 500
+
+    system_instruction = (
+        "You are NetGuide AI, an expert networking assistant for students. "
+        "When users paste Cisco configuration errors, diagnose the root cause and provide corrected code blocks. "
+        "For networking theory, explain core principles using structured bullet points, bold headers, and markdown tables. "
+        "Keep answers concise, highly organized, and optimized for low latency."
+    )
+
+    def generate():
+        full_reply = ""
+        try:
+            config = types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.3,
+                max_output_tokens=1500,
+            )
+
+            response_stream = client.models.generate_content_stream(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=config
+            )
+
+            for chunk in response_stream:
+                if chunk.text:
+                    full_reply += chunk.text
+                    yield chunk.text
+
+        except Exception as stream_err:
+            yield f"\n[Stream Error: {str(stream_err)}]"
+            return
+
+        # Save complete response to SQLite database after stream finishes
+        if full_reply:
+            conn = get_db_connection()
+            if conn:
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO chat_logs (user_id, prompt, response) VALUES (?, ?, ?)",
+                        (session['user_id'], prompt, full_reply)
+                    )
+                    conn.commit()
+                except Exception as log_err:
+                    print(f"Warning: Failed to log chat: {log_err}")
+                finally:
+                    conn.close()
+
+    return Response(stream_with_context(generate()), mimetype='text/plain')'''
 
 # --- ADMIN MANAGEMENT API ---
 @app.route('/api/admin/users', methods=['GET'])
@@ -383,3 +522,4 @@ def admin_delete_user():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+
